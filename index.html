@@ -9,6 +9,15 @@
 <body>
   <!-- Audio element without src; will be controlled by playlist logic in script.js -->
   <audio id="bg-music" preload="auto" autoplay muted playsinline></audio>
+  <!-- Gift gate overlay -->
+  <div id="gift-gate" aria-label="Màn mở quà" role="dialog">
+    <div class="gift-content">
+      <div class="gift-box">
+        <img src="images/gift/banh_trung_thu.png" alt="Hộp quà Trung Thu" class="gift-image" />
+      </div>
+      <button id="enter-gift" class="pulse-btn" aria-label="Nhận quà">Nhận quà ✨</button>
+    </div>
+  </div>
   <div id="night-sky">
     <div class="moon"></div>
     <div id="lantern-container"></div>

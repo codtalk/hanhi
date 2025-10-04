@@ -143,3 +143,52 @@ html, body {
   #popup { padding: 20px; }
   #popup-message { font-size: 0.95rem; }
 }
+
+/* Gift Gate Overlay */
+#gift-gate {
+  position: fixed;
+  inset: 0;
+  background: radial-gradient(circle at 50% 40%, #1a2336 0%, #0b111c 65%, #000 100%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+  animation: fadeInGate .7s ease;
+}
+@keyframes fadeInGate { from { opacity: 0; } to { opacity: 1; } }
+#gift-gate.hidden { pointer-events: none; opacity: 0; transition: opacity .6s ease; }
+
+.gift-content { text-align: center; }
+.gift-box { margin-bottom: 34px; position: relative; }
+.gift-image {
+  width: min(70vw, 340px);
+  filter: drop-shadow(0 8px 18px #0009) brightness(1.05);
+  animation: floatGift 3.8s ease-in-out infinite;
+}
+@keyframes floatGift {
+  0%,100% { transform: translateY(0); }
+  50% { transform: translateY(-18px); }
+}
+
+.pulse-btn {
+  --btnGlow: #ffcc66;
+  background: linear-gradient(135deg,#ffcc66,#ff9f40);
+  color: #2b1a08;
+  font-size: 1.2rem;
+  font-weight: 600;
+  border: none;
+  padding: 14px 40px;
+  border-radius: 50px;
+  cursor: pointer;
+  letter-spacing: .5px;
+  box-shadow: 0 0 0 4px #ffffff10, 0 6px 18px -4px #000c, 0 0 22px -4px var(--btnGlow);
+  position: relative;
+  animation: pulse 1.6s ease-in-out infinite, glowBreath 3.5s ease-in-out infinite;
+  text-transform: uppercase;
+}
+@keyframes pulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.07); } }
+@keyframes glowBreath { 0%,100% { box-shadow: 0 0 0 4px #ffffff10,0 6px 18px -4px #000c,0 0 22px -4px var(--btnGlow);} 50% { box-shadow:0 0 0 4px #ffffff10,0 8px 26px -6px #000c,0 0 40px 0 var(--btnGlow);} }
+.pulse-btn:active { transform: scale(.94); }
+.pulse-btn:focus { outline: 3px solid #ffe2a6; outline-offset: 4px; }
+
