@@ -26,6 +26,18 @@ const popupMessage = document.getElementById('popup-message');
 const closePopupBtn = document.getElementById('close-popup');
 const bgMusic = document.getElementById('bg-music');
 
+// Danh sách nhạc sẽ phát tuần tự (thêm / xoá file tại đây)
+// Sử dụng đường dẫn tương đối tới thư mục musics/
+const MUSIC_PLAYLIST = [
+    'musics/ChungTaKhongThuocVeNhau-SonTungMTP-4528181.mp3',
+    'musics/bat_tinh_yeu_len.mp3',
+];
+let currentTrackIndex = 0;
+let userInteractedForMusic = false; // đánh dấu khi user đã click / gõ phím / chạm
+let attemptedAuto = false; // đã từng gọi play() tự động
+let autoRetryTimer = null; // interval thử lại autoplay (nếu bị chặn)
+let fadeInterval = null;
+
 let messagesData = [];
 let spawnIntervalId = null;
 // Bộ nhớ các chỉ số lời chúc đã hiện trong "chu kỳ" hiện tại
@@ -152,15 +164,85 @@ window.addEventListener('keydown', (e) => {
 });
 
 // Handle music autoplay restrictions
-function attemptPlayMusic() {
-  if (!bgMusic) return;
+function loadCurrentTrack(force = false) {
+  if (!bgMusic || !MUSIC_PLAYLIST.length) return;
+  if (currentTrackIndex >= MUSIC_PLAYLIST.length) currentTrackIndex = 0; // vòng lặp
+  // Nếu đã có src đúng rồi và không force thì bỏ
+  const desired = location.origin ? new URL(MUSIC_PLAYLIST[currentTrackIndex], location.href).href : MUSIC_PLAYLIST[currentTrackIndex];
+  if (!force && bgMusic.src && bgMusic.src.endsWith(encodeURI(MUSIC_PLAYLIST[currentTrackIndex]))) return;
+  bgMusic.src = MUSIC_PLAYLIST[currentTrackIndex];
+  try { bgMusic.load(); } catch(_) {}
+}
+
+function playCurrentTrack(auto = true) {
+  if (!bgMusic || !MUSIC_PLAYLIST.length) return;
+  if (!bgMusic.src) loadCurrentTrack();
+  attemptedAuto = attemptedAuto || auto;
   const playPromise = bgMusic.play();
   if (playPromise && typeof playPromise.then === 'function') {
-    playPromise.catch(() => {
-      // Show a small unobtrusive prompt/button
-      showMusicButton();
+    playPromise.then(() => {
+      // Nếu phát thành công và đang muted do autoplay policy, sẽ unmute sau nếu được
+      if (auto && !userInteractedForMusic) {
+        // Không unmute ngay lập tức để tránh vi phạm policy; đợi gesture hoặc timeout mượt
+      }
+      stopAutoRetry();
+    }).catch(err => {
+      // Bị chặn autoplay
+      if (auto) scheduleAutoRetry();
+      // Chưa show nút ngay, cho vài lần thử (cải thiện experience)
+      autoRevealMusicButton();
+      console.debug('Autoplay bị chặn:', err?.name || err);
     });
   }
+}
+
+function nextTrack() {
+  if (!MUSIC_PLAYLIST.length) return;
+  currentTrackIndex = (currentTrackIndex + 1) % MUSIC_PLAYLIST.length;
+  loadCurrentTrack();
+  playCurrentTrack(false); // không hiện nút nữa vì user đã cho phép
+}
+
+function attemptPlayMusic(initial = false) {
+  if (!bgMusic || !MUSIC_PLAYLIST.length) return;
+  loadCurrentTrack();
+  // Đảm bảo muted để tăng khả năng được phép autoplay
+  if (initial) {
+    bgMusic.muted = true;
+    bgMusic.volume = 1; // volume nội bộ; khi unmute sẽ nghe luôn
+  }
+  playCurrentTrack(true);
+}
+
+function scheduleAutoRetry() {
+  if (autoRetryTimer) return;
+  let tries = 0;
+  autoRetryTimer = setInterval(() => {
+    if (userInteractedForMusic) { stopAutoRetry(); return; }
+    if (tries++ > 4) { // thử vài lần rồi thôi
+      stopAutoRetry();
+      showMusicButton();
+      return;
+    }
+    playCurrentTrack(true);
+  }, 1800);
+}
+
+function stopAutoRetry() {
+  if (autoRetryTimer) {
+    clearInterval(autoRetryTimer);
+    autoRetryTimer = null;
+  }
+}
+
+let revealButtonTimeout = null;
+function autoRevealMusicButton() {
+  if (revealButtonTimeout || document.getElementById('music-btn')) return;
+  revealButtonTimeout = setTimeout(() => {
+    if (!userInteractedForMusic && bgMusic.paused) {
+      showMusicButton();
+    }
+  }, 4200); // chờ vài giây xem autoplay có thành công ở lần retry
 }
 
 function showMusicButton() {
@@ -183,16 +265,115 @@ function showMusicButton() {
     boxShadow: '0 4px 12px #0008'
   });
   btn.addEventListener('click', () => {
-    bgMusic.play().then(() => btn.remove());
+    userInteractedForMusic = true;
+    stopAutoRetry();
+    playCurrentTrack(false);
+    // Unmute mượt (nếu đang muted)
+    if (bgMusic.muted) smoothlyUnmute(); else ensureAudible();
+    btn.remove();
+    // Khi nhạc đã phát -> hiện nút đổi nhạc (nếu có nhiều hơn 1 track)
+    showChangeTrackButton();
   });
   document.body.appendChild(btn);
 }
 
+// Nút đổi bài (skip) – chỉ tạo nếu playlist > 1
+function showChangeTrackButton() {
+  if (MUSIC_PLAYLIST.length < 2) return; // không cần nếu chỉ 1 bài
+  if (document.getElementById('next-track-btn')) return;
+  const btn = document.createElement('button');
+  btn.id = 'next-track-btn';
+  btn.textContent = 'Đổi nhạc ⏭️';
+  Object.assign(btn.style, {
+    position: 'fixed',
+    bottom: '14px',
+    left: '160px', // đặt lệch sang phải để không đè nút phát nhạc
+    zIndex: 1200,
+    padding: '10px 16px',
+    borderRadius: '30px',
+    border: '2px solid #ffcc66',
+    background: 'linear-gradient(135deg,#2f3d66,#1d2744)',
+    color: '#ffe8b0',
+    cursor: 'pointer',
+    fontSize: '15px',
+    boxShadow: '0 4px 12px #0008'
+  });
+  btn.title = 'Chuyển sang bài tiếp theo';
+  btn.addEventListener('click', () => {
+    // Nếu chưa phát được (autoplay bị chặn) thì force play sau khi load bài tiếp
+    currentTrackIndex = (currentTrackIndex + 1) % MUSIC_PLAYLIST.length;
+    loadCurrentTrack(true);
+    playCurrentTrack(false);
+    if (bgMusic.muted && userInteractedForMusic) smoothlyUnmute();
+  });
+  document.body.appendChild(btn);
+}
+
+// Khi bài hát kết thúc -> chuyển bài tiếp theo
+if (bgMusic) {
+  bgMusic.addEventListener('ended', () => {
+    nextTrack();
+  });
+}
+
+function ensureAudible() {
+  if (!bgMusic) return;
+  if (bgMusic.muted) bgMusic.muted = false;
+  if (bgMusic.volume < 1) bgMusic.volume = 1;
+}
+
+function smoothlyUnmute() {
+  if (!bgMusic) return;
+  if (!bgMusic.muted && bgMusic.volume >= 1) return;
+  bgMusic.muted = false;
+  const target = 1;
+  const startVol = bgMusic.volume || 0;
+  bgMusic.volume = startVol;
+  if (fadeInterval) clearInterval(fadeInterval);
+  const step = 0.05 * Math.max(0.5, target - startVol); // nhỏ hơn nếu đã có 1 phần âm lượng
+  fadeInterval = setInterval(() => {
+    bgMusic.volume = Math.min(target, bgMusic.volume + step);
+    if (bgMusic.volume >= target) {
+      clearInterval(fadeInterval);
+    }
+  }, 120);
+}
+
+// Global user gesture fallback: bất kỳ click / touch đầu tiên sẽ gỡ mute & play
+['click','touchstart','keydown'].forEach(evt => {
+  window.addEventListener(evt, () => {
+    if (!bgMusic || userInteractedForMusic) return;
+    userInteractedForMusic = true;
+    stopAutoRetry();
+    playCurrentTrack(false);
+    // Unmute hoặc mượt tuỳ trạng thái
+    if (bgMusic.muted) smoothlyUnmute(); else ensureAudible();
+  }, { once: true, passive: true });
+});
+
+// Visibility change thử lại (trong trường hợp tab background lúc load)
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && !userInteractedForMusic && bgMusic && bgMusic.paused) {
+    playCurrentTrack(true);
+  }
+});
+
 // Init
 window.addEventListener('DOMContentLoaded', async () => {
   await loadMessages();
-  attemptPlayMusic();
+  // Gán trước src để một số engine iOS coi như 'preload' hợp lệ
+  loadCurrentTrack();
+  attemptPlayMusic(true);
+  // Nếu sau 8s vẫn fail, chắc chắn show nút
+  setTimeout(() => { if (!userInteractedForMusic && bgMusic && bgMusic.paused) showMusicButton(); }, 8000);
+  // Nếu phát được muted, tự unmute nhẹ sau 1s (tùy ý)
+  setTimeout(() => {
+    if (bgMusic && !userInteractedForMusic && !bgMusic.paused && bgMusic.muted) {
+      smoothlyUnmute();
+    }
+  }, 400);
+  // Hiện nút đổi nhạc ngay từ đầu (nếu có hơn 1 bài)
+  showChangeTrackButton();
   startSpawning();
-  // Pre-spawn some lanterns
   for (let i = 0; i < 6; i++) createLantern();
 });

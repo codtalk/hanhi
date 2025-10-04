@@ -7,7 +7,8 @@
   <link rel="stylesheet" href="style/style.css" />
 </head>
 <body>
-  <audio id="bg-music" src="style/Nhac.mp3" autoplay loop></audio>
+  <!-- Audio element without src; will be controlled by playlist logic in script.js -->
+  <audio id="bg-music" preload="auto" autoplay muted playsinline></audio>
   <div id="night-sky">
     <div class="moon"></div>
     <div id="lantern-container"></div>
